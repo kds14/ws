@@ -35,6 +35,7 @@ class Context():
 		self.ip = ip
 		self.port = port
 		self.buf_size = buf_size
+		self.conns = {}
 
 def handle_req(ctx: Context, data: str):
 	headers = data.split('\r\n')
@@ -57,20 +58,31 @@ def send_response(conn, content):
 def my_func():
 	return "HELLO XD"
 
+def add2buff(buffer, add):
+	buff = buffer + add
+	return (buff, len(buff) >= 4 and buff[-4:] == "\r\n\r\n")
+
 def main():
-	ctx = Context('127.0.0.1', 5000, 8192)
+	ctx = Context('127.0.0.1', 5000, 1024)
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	sock.bind((ctx.ip, ctx.port))
 	sock.listen(1)
 	
 	conn, addr = sock.accept()
+	ctx.conns[conn] = ""
 	router.conn = conn
 	print("{} and {}".format(conn.getsockname(), conn.getpeername()))
+	buff = ""
 	while True:
 		data = conn.recv(ctx.buf_size)
-		if data:
-			handle_req(ctx, data.decode('utf-8'))
+		if not data:
+			continue
+		buff, res = add2buff(buff, data.decode('utf-8'))
+		if res:
+			print(len(data))
+			handle_req(ctx, buff)
+			buff = ""
 	conn.close()
 	
 if __name__ == "__main__":
