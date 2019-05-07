@@ -1,8 +1,8 @@
 import socket
 
 class Req():
-	GET=1
-	POST=2
+	GET=0x1
+	POST=0x2
 
 class Request():
 	def __init__(self, req: int, content: str):
@@ -16,10 +16,12 @@ class Router():
 			return func
 		return set_route
 
-	def handle_route(self, rt):
+	def handle_route(self, rt, reqs):
 		# prevent bad reqs
 		if rt in self.routes:
-			self.routes[rt][0]()
+			r = self.routes[rt]
+			if r[1] & reqs:
+				r[0]()
 
 	def __init__(self):
 		self.routes = {}
@@ -28,23 +30,25 @@ class Router():
 router = Router()
 
 class Context():
+	req_dict = {"GET":Req.GET,"POST":Req.POST}
 	def __init__(self, ip: str, port: int, buf_size: int):
 		self.ip = ip
 		self.port = port
 		self.buf_size = buf_size
 
-def handle_req(data):
+def handle_req(ctx: Context, data: str):
 	headers = data.split('\r\n')
-	route = headers[0].split()[1]
-	print("ROUTE {}".format(route))
-	router.handle_route(route)
+	req_header = headers[0].split()
+	req = req_header[0]
+	route = req_header[1]
+	router.handle_route(route, ctx.req_dict[req])
 
 def send_response(conn, content):
 	if conn is None:
 		return
 	msg = "{} {} {}\r\n".format("HTTP/1.1", 200, "OK")
-	msg += "{}: {}\r\n".format("Content-Length", len(content))
 	msg += "{}: {}\r\n".format("Content-Type", "text/html")
+	msg += "{}: {}\r\n".format("Content-Length", len(content))
 	msg += "\r\n"
 	msg += content
 	conn.send(bytes(msg, 'utf-8'))
@@ -54,7 +58,7 @@ def my_func():
 	return "HELLO XD"
 
 def main():
-	ctx = Context('127.0.0.1', 5000, 8096)
+	ctx = Context('127.0.0.1', 5000, 8192)
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	sock.bind((ctx.ip, ctx.port))
@@ -66,7 +70,7 @@ def main():
 	while True:
 		data = conn.recv(ctx.buf_size)
 		if data:
-			handle_req(data.decode('utf-8'))
+			handle_req(ctx, data.decode('utf-8'))
 	conn.close()
 	
 if __name__ == "__main__":
